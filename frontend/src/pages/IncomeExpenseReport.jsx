@@ -151,6 +151,7 @@ const CATEGORY_LABEL_MAP = {
   "holded security refund":             "Security Refund",
   "bank to cash":                       "Bank to Cash",
   "cash to branch":                     "Bank to Cash",
+  "petty cash received":                "Petty Cash Received",
   "bank fees and charges":              "Bank Fees and Charges",
   "bank charges":                       "Bank Charges",
   "finance charges":                    "Finance Charges",

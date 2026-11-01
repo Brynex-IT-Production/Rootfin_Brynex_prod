@@ -150,6 +150,7 @@ const subCategories = [
     // Income sub-categories
     { value: "compensation from cancellation", label: "Compensation from Cancellation" },
     { value: "compensation from product damage", label: "Compensation from Product Damage" },
+    { value: "petty cash received", label: "Petty Cash Received" },
     { value: "bank to cash", label: "Bank to Cash" },
 ];
 
@@ -163,6 +164,7 @@ const CATEGORY_LABEL_MAP = {
     "travel exp": "Travel Exp",
     "fuel exp": "Fuel Exp",
     "petty expenses": "Office Expense",
+    "petty cash received": "Petty Cash Received",
     "telephone internet": "Internet Expense",
     "utility bill": "Electricity Charges",
     "waste management": "Waste Management",
@@ -388,6 +390,7 @@ const DayBookInc = () => {
         "balance payable",
         "compensation from cancellation",
         "compensation from product damage",
+        "petty cash received",
     ], []);
 
     const processedTransactions = useMemo(() => {
@@ -543,7 +546,7 @@ const DayBookInc = () => {
         ]);
         const incomeCategoryValues = new Set([
             "shoe sales", "shirt sales", "mixed sales", "compensation", "advance", "balance payable",
-            "compensation from cancellation", "compensation from product damage",
+            "compensation from cancellation", "compensation from product damage", "petty cash received",
         ]);
         const inferType = (tx) => {
             const t = (tx.type || "").toLowerCase();

@@ -175,6 +175,7 @@ const subCategories = [
   // Income sub-categories
   { value: "compensation from cancellation", label: "Compensation from Cancellation" },
   { value: "compensation from product damage", label: "Compensation from Product Damage" },
+  { value: "petty cash received", label: "Petty Cash Received" },
   { value: "bank to cash", label: "Bank to Cash" },
 ];
 
@@ -188,6 +189,7 @@ const CATEGORY_LABEL_MAP = {
   "travel exp": "Travel Exp",
   "fuel exp": "Fuel Exp",
   "petty expenses": "Office Expense",
+  "petty cash received": "Petty Cash Received",
   "telephone internet": "Internet Expense",
   "utility bill": "Electricity Charges",
   "waste management": "Waste Management",

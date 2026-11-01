@@ -47,10 +47,27 @@ const Income = () => {
   const isSuperAdmin = (currentusers.role || "").toLowerCase() === "superadmin";
   const isFinancialHead = (currentusers.role || "").toLowerCase() === "financial_head";
   const canSelectStore = isAdmin || isSuperAdmin || isFinancialHead;
-  const cats = (isAdmin || isSuperAdmin || isFinancialHead) ? baseIncomeCats : baseIncomeCats.filter(c => c.value !== "bank to cash");
 
   const defaultStore = currentusers.locCode || "759";
   const [selectedStore, setSelectedStore] = useState(defaultStore);
+
+  const activeLocCode = canSelectStore ? selectedStore : currentusers.locCode;
+  const activeLocObj = fallbackLocations.find(l => String(l.locCode) === String(activeLocCode));
+  const activeLocName = (activeLocObj?.locName || currentusers.locName || "").toLowerCase();
+  const isOfficeOrWarehouse =
+    ["102", "103", "858"].includes(String(activeLocCode)) ||
+    activeLocName.includes("office") ||
+    activeLocName.includes("warehouse");
+
+  let baseCats = (isAdmin || isSuperAdmin || isFinancialHead)
+    ? [...baseIncomeCats]
+    : baseIncomeCats.filter(c => c.value !== "bank to cash");
+
+  if (isOfficeOrWarehouse) {
+    baseCats.push({ value: "petty cash received", label: "Petty Cash Received" });
+  }
+
+  const cats = baseCats;
 
   const [selectedCategory, setSelectedCategory] = useState(cats[0]);
   const [amount, setAmount] = useState("");
@@ -166,11 +183,11 @@ const Income = () => {
                 <label className="block text-[11px] font-semibold uppercase text-gray-500 mb-2">Category</label>
                 <div className="relative">
                   <select
-                    value={selectedCategory.value}
+                    value={selectedCategory?.value || cats[0]?.value}
                     onChange={e => {
                       const cat = cats.find(c => c.value === e.target.value);
-                      setSelectedCategory(cat);
-                      if (cat.value === "bank to cash") {
+                      setSelectedCategory(cat || cats[0]);
+                      if (cat?.value === "bank to cash") {
                         setPaymentMethod("cash");
                         setSplitPayment(false);
                       }
