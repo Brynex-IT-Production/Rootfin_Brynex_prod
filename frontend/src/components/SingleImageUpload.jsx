@@ -2,9 +2,7 @@ import { useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   IMAGE_CONFIG,
-  validateImageFile,
-  validateImageDimensions,
-  fileToBase64,
+  processImageFiles,
   getFilesFromDragEvent,
   triggerFileInput,
 } from '../utils/imageUpload';
@@ -66,35 +64,12 @@ const SingleImageUpload = ({
     setErrors([]);
 
     try {
-      // Validate file
-      const validation = validateImageFile(file);
-      if (!validation.valid) {
-        setErrors([validation.error]);
-        setUploading(false);
-        return;
-      }
-
-      // Validate dimensions
-      const dimensionValidation = await validateImageDimensions(file);
-      if (!dimensionValidation.valid) {
-        setErrors([dimensionValidation.error]);
-        setUploading(false);
-        return;
-      }
-
-      // Convert to base64
-      try {
-        const base64 = await fileToBase64(file);
-        onImageSelect({
-          base64,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        });
-      } catch (error) {
-        setErrors(['Failed to process image']);
-        console.error('Image upload error:', error);
-      }
+      const { images, errors: processingErrors } = await processImageFiles([file]);
+      if (processingErrors.length > 0) setErrors(processingErrors);
+      if (images[0]) onImageSelect(images[0]);
+    } catch (error) {
+      setErrors(['Failed to process image']);
+      console.error('Image upload error:', error);
     } finally {
       setUploading(false);
     }
@@ -131,7 +106,7 @@ const SingleImageUpload = ({
               Drag image here or browse
             </p>
             <p className="mt-2 text-xs leading-5 text-[#94a3b8]">
-              Max {IMAGE_CONFIG.MAX_FILE_SIZE / (1024 * 1024)}MB, up to {IMAGE_CONFIG.MAX_DIMENSIONS.width}x{IMAGE_CONFIG.MAX_DIMENSIONS.height}px
+              Images up to {IMAGE_CONFIG.MAX_SOURCE_FILE_SIZE / (1024 * 1024)}MB are compressed automatically
             </p>
             <button
               type="button"
@@ -146,7 +121,7 @@ const SingleImageUpload = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
+              accept="image/*,.heic,.heif"
               onChange={handleFileInput}
               style={{ display: 'none' }}
             />

@@ -236,7 +236,7 @@ const INDIRECT_EXPENSE_CATS = [
   { value: "Courier Charges", label: "Courier Charges" },
   { value: "Repairs & Maintenance", label: "Repairs & Maintenance" },
   { value: "Incentive", label: "Incentive" },
-  { value: "Salary/Salary Advance", label: "Salary/Salary Advance" },
+  { value: "Salary Advance", label: "Salary Advance" },
   { value: "Travel Exp", label: "Travel Exp" },
   { value: "Fuel Exp", label: "Fuel Exp" },
   { value: "Office Expense", label: "Office Expense" },
@@ -264,7 +264,7 @@ const INDIRECT_EXPENSE_CATS = [
   { value: "Janitorial Expense", label: "Janitorial Expense" },
   { value: "Postage", label: "Postage" },
   { value: "Bad Debt", label: "Bad Debt" },
-  { value: "Salaries and Employee Wages", label: "Salaries and Employee Wages" },
+  { value: "Employee Wages", label: "Employee Wages" },
   { value: "Meals and Entertainment", label: "Meals and Entertainment" },
   { value: "Depreciation Expense", label: "Depreciation Expense" },
   { value: "Consultant Expense", label: "Consultant Expense" },
@@ -297,7 +297,7 @@ const INDIRECT_EXPENSE_CATS = [
   { value: "Subscription Charges", label: "Subscription Charges" },
   { value: "Marketing & Promotion", label: "Marketing & Promotion" },
   { value: "Advertising And Marketing", label: "Advertising And Marketing" },
-  { value: "Salary And Wages", label: "Salary And Wages" },
+  { value: "Salary", label: "Salary" },
   { value: "Overtime Payment", label: "Overtime Payment" },
   { value: "Consultation Charges", label: "Consultation Charges" },
   { value: "Accounting Charges", label: "Accounting Charges" },
@@ -364,6 +364,16 @@ const fallbackLocations = [
   { locName: "WAREHOUSE", locCode: "103" }
 ];
 
+const BANK_ACCOUNTS = [
+  { value: "Hdfc SG **0420",       label: "Hdfc SG **0420" },
+  { value: "Hdfc ZR **9637",       label: "Hdfc ZR **9637" },
+  { value: "Hdfc Statutory **9726",label: "Hdfc Statutory **9726" },
+  { value: "Federal ED **8633",    label: "Federal ED **8633" },
+  { value: "Federal MG **9433",    label: "Federal MG **9433" },
+  { value: "Federal DS **8575",    label: "Federal DS **8575" },
+  { value: "Federal Rootments",    label: "Federal Rootments" },
+];
+
 const DirectIndirectExpenses = ({ initialType = "direct" }) => {
   const isSidebarOpen = useSidebar();
   const location = useLocation();
@@ -399,6 +409,7 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
   const [cashAmount, setCashAmount] = useState("");
   const [bankAmount, setBankAmount] = useState("");
   const [upiAmount, setUpiAmount] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
   
   // Image Upload States
   const fileInputRef = useRef(null);
@@ -406,6 +417,7 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploadErrors, setUploadErrors] = useState([]);
+  const [uploadNotice, setUploadNotice] = useState("");
 
   // Submission States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -453,6 +465,7 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
   const handleFiles = async (files) => {
     setUploading(true);
     setUploadErrors([]);
+    setUploadNotice("");
 
     try {
       const remainingSlots = IMAGE_CONFIG.MAX_FILES - images.length;
@@ -471,6 +484,16 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
 
       if (processedImages.length > 0) {
         setImages((prev) => [...prev, ...processedImages]);
+
+        const compressedImages = processedImages.filter((image) => image.compressed);
+        if (compressedImages.length > 0) {
+          const originalBytes = compressedImages.reduce((sum, image) => sum + image.originalSize, 0);
+          const compressedBytes = compressedImages.reduce((sum, image) => sum + image.size, 0);
+          const formatMb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+          setUploadNotice(
+            `${compressedImages.length} image${compressedImages.length === 1 ? " was" : "s were"} compressed from ${formatMb(originalBytes)} to ${formatMb(compressedBytes)}.`,
+          );
+        }
       }
     } catch (error) {
       setUploadErrors(["Error processing images. Please try again."]);
@@ -482,6 +505,7 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
 
   const handleRemoveImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
+    setUploadNotice("");
   };
 
   const handleSubmit = async (e) => {
@@ -531,9 +555,9 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
       bank: splitPayment ? `-${bankAmount || "0"}` : paymentMethod === "bank" ? `-${amount}` : "0",
       upi:  splitPayment ? `-${upiAmount  || "0"}` : paymentMethod === "upi"  ? `-${amount}` : "0",
       paymentMethod: splitPayment ? "split" : paymentMethod,
+      bankAccount: (paymentMethod === "bank" || splitPayment) ? bankAccount : "",
       date: new Date().toISOString().split("T")[0],
       attachment: images[0]?.base64 || null,
-      attachments: images.map(img => img.base64),
     };
 
     try {
@@ -570,8 +594,10 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
     setCashAmount("");
     setBankAmount("");
     setUpiAmount("");
+    setBankAccount("");
     setImages([]);
     setUploadErrors([]);
+    setUploadNotice("");
     navigate("/record-expense");
   };
 
@@ -769,6 +795,23 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
               </label>
             </div>
 
+            {/* Bank Account Dropdown - shown when Bank is selected or in Split Payment */}
+            {(paymentMethod === "bank" || splitPayment) && (
+              <div className="mt-4 max-w-xs">
+                <label className="block text-xs font-semibold text-gray-700 tracking-wide mb-2 uppercase">
+                  Bank Account <span className="text-red-500 font-bold">*</span>
+                </label>
+                <SearchableSelect
+                  value={bankAccount}
+                  onChange={(val) => setBankAccount(val)}
+                  options={BANK_ACCOUNTS}
+                  placeholder="Select Bank Account"
+                  searchPlaceholder="Search bank account..."
+                  icon={BsBank2}
+                />
+              </div>
+            )}
+
             {splitPayment && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 bg-purple-50/20 p-4 rounded-xl border border-purple-100">
                 {[
@@ -779,7 +822,7 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
                   <div key={lbl}>
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase">{lbl} Amount</label>
                     <div className="relative flex items-center rounded-xl border border-gray-200 bg-white px-3 h-11 focus-within:border-[#9B48D7] focus-within:ring-2 focus-within:ring-purple-500/10">
-                      <span className="text-gray-400 text-sm mr-1.5">₹</span>
+                      <span className="text-gray-400 text-sm mr-1.5">Γé╣</span>
                       <input 
                         type="number" 
                         step="any"
@@ -823,7 +866,7 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
                   Drag image(s) here or browse images
                 </p>
                 <p className="mt-1 text-xs text-gray-400 max-w-xs leading-relaxed">
-                  Up to 15 images (max 5MB each, max 7000×7000px)
+                  Up to 15 images. Large images up to 30MB are compressed automatically.
                 </p>
 
                 <button
@@ -832,14 +875,14 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
                   disabled={uploading}
                   className="mt-4 rounded-xl bg-[#1E232A] hover:bg-black text-white px-6 py-2.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {uploading ? "Uploading..." : "Upload Images"}
+                  {uploading ? "Compressing..." : "Upload Images"}
                 </button>
 
                 <input
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  accept="image/*,.heic,.heif"
                   onChange={handleFileInput}
                   style={{ display: "none" }}
                 />
@@ -854,6 +897,12 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
                     </p>
                   ))}
                 </div>
+              )}
+
+              {uploadNotice && (
+                <p className="mt-2 text-xs text-emerald-700 font-medium" role="status">
+                  {uploadNotice}
+                </p>
               )}
 
               {/* Uploaded Images Thumbnails */}
@@ -873,6 +922,11 @@ const DirectIndirectExpenses = ({ initialType = "direct" }) => {
                           alt={img.name || `Upload ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />
+                        {img.compressed && (
+                          <span className="absolute bottom-1 left-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                            Compressed
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleRemoveImage(idx)}

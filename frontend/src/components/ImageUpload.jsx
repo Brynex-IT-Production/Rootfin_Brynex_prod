@@ -117,10 +117,8 @@ const ImageUpload = ({
           Drag image(s) here or browse images
         </p>
         <p className="mt-1.5 text-xs leading-5 text-[#6B7280]">
-          You can add up to {IMAGE_CONFIG.MAX_FILES} images, each not exceeding{' '}
-          {IMAGE_CONFIG.MAX_FILE_SIZE / (1024 * 1024)}MB in size and{' '}
-          {IMAGE_CONFIG.MAX_DIMENSIONS.width}x{IMAGE_CONFIG.MAX_DIMENSIONS.height}{' '}
-          pixels resolution.
+          Up to {IMAGE_CONFIG.MAX_FILES} images. Large images (up to{' '}
+          {IMAGE_CONFIG.MAX_SOURCE_FILE_SIZE / (1024 * 1024)}MB) are compressed automatically.
         </p>
         <button
           type="button"
@@ -136,7 +134,7 @@ const ImageUpload = ({
           ref={fileInputRef}
           type="file"
           multiple={multiple}
-          accept="image/jpeg,image/png,image/gif,image/webp"
+          accept="image/*,.heic,.heif"
           onChange={handleFileInput}
           style={{ display: 'none' }}
         />

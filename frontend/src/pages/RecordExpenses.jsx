@@ -388,6 +388,7 @@ const RecordExpenses = () => {
     { label: "Branch", key: "branch" },
     { label: "Expense Type", key: "expenseType" },
     { label: "Payment Method", key: "paymentMethod" },
+    { label: "Bank Account", key: "bankAccount" },
     { label: "Amount (₹)", key: "amount" },
     { label: "Remarks", key: "remarks" },
     { label: "Attachment", key: "attachment" },
@@ -404,6 +405,7 @@ const RecordExpenses = () => {
         branch: getBranchName(tx.locCode),
         expenseType: isDirect ? "Direct" : "Indirect",
         paymentMethod: (tx.paymentMethod || "CASH").toUpperCase(),
+        bankAccount: tx.bankAccount || "-",
         amount: rawAmount,
         remarks: getCleanRemark(tx.remark),
         attachment: attachmentLink,
@@ -582,11 +584,13 @@ const RecordExpenses = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#333333] text-white text-[11px] font-semibold tracking-wider uppercase">
+                  <th className="py-3.5 px-5">Date</th>
                   <th className="py-3.5 px-5">Expense Category</th>
                   <th className="py-3.5 px-5">Branch</th>
                   <th className="py-3.5 px-5 text-center">Expense Type</th>
                   <th className="py-3.5 px-5">Attachment</th>
                   <th className="py-3.5 px-5">Payment Method</th>
+                  <th className="py-3.5 px-5">Bank Account</th>
                   <th className="py-3.5 px-5">Amount</th>
                   <th className="py-3.5 px-5">Remarks</th>
                 </tr>
@@ -594,13 +598,13 @@ const RecordExpenses = () => {
               <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="py-12 text-center text-gray-400">
+                    <td colSpan="9" className="py-12 text-center text-gray-400">
                       Loading expense records...
                     </td>
                   </tr>
                 ) : filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="py-12 text-center text-gray-400">
+                    <td colSpan="9" className="py-12 text-center text-gray-400">
                       No expense records found for the selected criteria.
                     </td>
                   </tr>
@@ -612,6 +616,11 @@ const RecordExpenses = () => {
 
                     return (
                       <tr key={tx._id || idx} className="hover:bg-gray-50/80 transition-colors">
+                        {/* Date */}
+                        <td className="py-4 px-5 text-gray-500 text-xs whitespace-nowrap">
+                          {tx.date ? tx.date.split("T")[0] : "-"}
+                        </td>
+
                         {/* Category */}
                         <td className="py-4 px-5 font-medium text-gray-900">
                           {getCleanCategory(tx.category)}
@@ -654,6 +663,11 @@ const RecordExpenses = () => {
                         {/* Payment Method */}
                         <td className="py-4 px-5 font-medium text-gray-800 uppercase text-xs">
                           {tx.paymentMethod || "CASH"}
+                        </td>
+
+                        {/* Bank Account */}
+                        <td className="py-4 px-5 text-xs text-gray-600 whitespace-nowrap">
+                          {tx.bankAccount || <span className="text-gray-300">—</span>}
                         </td>
 
                         {/* Amount */}
