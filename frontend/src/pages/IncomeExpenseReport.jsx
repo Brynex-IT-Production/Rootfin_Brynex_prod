@@ -1298,47 +1298,21 @@ export default function IncomeExpenseReport() {
       <Headers />
       
       <div className={`transition-all duration-300 p-3 sm:p-6 bg-[#fbfcfd] min-h-screen ${isSidebarOpen ? 'lg:ml-64 ml-0' : 'ml-0'}`}>
-        {/* Page Title & Header with Export Buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 style={{ 
-              fontSize: "24px", 
-              fontWeight: "700", 
-              color: "#1e293b",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-              margin: "0 0 4px 0"
-            }}>
-              Income &amp; Expenses Report
-            </h1>
-            <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
-              Detailed overview of Income &amp; Expense Report
-            </p>
-          </div>
-
-          {hasData && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleExportExcel}
-                disabled={exportingExcel}
-                className="h-[38px] px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer inline-flex items-center gap-1.5"
-                title="Download Excel representing current expanded screen view"
-              >
-                <FileSpreadsheet size={15} />
-                <span>{exportingExcel ? "Exporting..." : "Excel"}</span>
-              </button>
-
-              <button
-                onClick={handleExportPdf}
-                disabled={exportingPdf}
-                className="h-[38px] px-3.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer inline-flex items-center gap-1.5"
-                title="Download PDF representing current expanded screen view"
-              >
-                <FileText size={15} />
-                <span>{exportingPdf ? "Generating..." : "PDF"}</span>
-              </button>
-            </div>
-          )}
+        {/* Page Title & Header */}
+        <div style={{ marginBottom: "24px" }}>
+          <h1 style={{ 
+            fontSize: "24px", 
+            fontWeight: "700", 
+            color: "#1e293b",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            margin: "0 0 4px 0"
+          }}>
+            Income &amp; Expenses Report
+          </h1>
+          <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
+            Detailed overview of Income &amp; Expense Report
+          </p>
         </div>
 
         {/* Filters Card */}
@@ -1483,6 +1457,30 @@ export default function IncomeExpenseReport() {
                 {loading ? <RefreshCw size={14} className="animate-spin mr-1.5" /> : null}
                 <span>Fetch Data</span>
               </button>
+
+              {hasData && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    disabled={exportingExcel}
+                    className="h-[38px] px-5 bg-[#a855f7] hover:bg-[#9333ea] text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
+                    title="Download Excel representing current expanded screen view"
+                  >
+                    <span>{exportingExcel ? "Exporting..." : "Excel"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportPdf}
+                    disabled={exportingPdf}
+                    className="h-[38px] px-5 bg-[#a855f7] hover:bg-[#9333ea] text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
+                    title="Download PDF representing current expanded screen view"
+                  >
+                    <span>{exportingPdf ? "Generating..." : "PDF"}</span>
+                  </button>
+                </>
+              )}
 
 
             </div>
