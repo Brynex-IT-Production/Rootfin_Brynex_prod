@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Helmet } from "react-helmet";
-import { RefreshCw, ChevronDown, ChevronRight, Filter, TrendingUp, TrendingDown, ArrowUpDown, ShieldCheck, ShieldAlert, Landmark } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, Filter, TrendingUp, TrendingDown, ArrowUpDown, ShieldCheck, ShieldAlert, Landmark, FileSpreadsheet, FileText } from "lucide-react";
 import { CSVLink } from "react-csv";
 import Headers from "../components/Header.jsx";
 import baseUrl from "../api/api";
@@ -265,6 +265,10 @@ export default function IncomeExpenseReport() {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [expanded, setExpanded] = useState({});
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  const tableContainerRef = useRef(null);
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
@@ -864,7 +868,255 @@ export default function IncomeExpenseReport() {
     return rows;
   }, [incomeGrouped, returnableIncomeGrouped, expenseGrouped, holdedSecRefundGrouped, cashToBankGrouped, bankToCashGrouped]);
 
-  // Renders: category header row → directly transaction rows (no subcategory intermediate row)
+  // Builds an HTML table string representing ONLY currently expanded / visible rows on screen + summary cards
+  const getVisibleTableHtml = (isForExcel = false) => {
+    const tableEl = tableContainerRef.current?.querySelector("table");
+    if (!tableEl) return "";
+
+    const clone = tableEl.cloneNode(true);
+
+    // Remove collapse chevron icons/SVGs and empty action column
+    clone.querySelectorAll("svg, .pointer-events-none").forEach(el => el.remove());
+
+    const tableHtml = clone.outerHTML;
+
+    // Build the Summary Cards layout
+    const summaryCardsHtml = `
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Total Income</div>
+          <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0 8px 0;">${fmt(incTotal)}</div>
+          <div style="font-size: 10px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+            <div>Cash: <strong>${fmt(incTotals.cash)}</strong></div>
+            <div>Razorpay: <strong>${fmt(incTotals.rbl)}</strong></div>
+            <div>Card/Bank: <strong>${fmt(incTotals.bank)}</strong></div>
+            <div>UPI: <strong>${fmt(incTotals.upi)}</strong></div>
+          </div>
+        </div>
+
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Returnable Income</div>
+          <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0 8px 0;">${fmt(retTotal)}</div>
+          <div style="font-size: 10px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+            Total returnable income held
+          </div>
+        </div>
+
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Total Expenses</div>
+          <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0 8px 0;">${fmt(Math.abs(expTotal))}</div>
+          <div style="font-size: 10px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+            <div>Cash: <strong>${fmt(Math.abs(expTotals.cash))}</strong></div>
+            <div>Razorpay: <strong>${fmt(Math.abs(expTotals.rbl))}</strong></div>
+            <div>Card/Bank: <strong>${fmt(Math.abs(expTotals.bank))}</strong></div>
+            <div>UPI: <strong>${fmt(Math.abs(expTotals.upi))}</strong></div>
+          </div>
+        </div>
+
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Net Difference</div>
+          <div style="font-size: 18px; font-weight: 800; color: ${topNetTotal >= 0 ? '#16a34a' : '#dc2626'}; margin: 4px 0 8px 0;">
+            ${topNetTotal >= 0 ? fmt(topNetTotal) : `-${fmt(Math.abs(topNetTotal))}`}
+          </div>
+          <div style="font-size: 10px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+            <div>Cash: <strong>${fmt(topNetCash)}</strong></div>
+            <div>Razorpay: <strong>${fmt(topNetRbl)}</strong></div>
+            <div>Card/Bank: <strong>${fmt(topNetBank)}</strong></div>
+            <div>UPI: <strong>${fmt(topNetUpi)}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Income &amp; Expenses Report</title>
+        <style>
+          @page { size: landscape; margin: 8mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 15px; font-size: 11px; color: #1e293b; background: #ffffff; }
+          .header { margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+          .header h1 { font-size: 20px; font-weight: 800; margin: 0 0 4px 0; text-transform: uppercase; color: #0f172a; }
+          .header p { margin: 0; font-size: 11px; color: #64748b; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+          th { background: #f8fafc; color: #334155; font-weight: 700; text-align: left; padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10px; }
+          td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: middle; }
+          tr.bg-[#e8fce8] td { background-color: #e8fce8 !important; font-weight: 700; }
+          tr.bg-[#ffeae8] td { background-color: #ffeae8 !important; font-weight: 700; }
+          tr.bg-gray-50/70 td { background-color: #f1f5f9 !important; font-weight: 600; }
+          tr.bg-[#1c1c1c] td { background-color: #1e293b !important; color: #ffffff !important; font-weight: 700; }
+          tr.bg-blue-50/90 td { background-color: #eff6ff !important; font-weight: 800; }
+          .text-right { text-align: right; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Income &amp; Expenses Report</h1>
+          <p>Period: ${fromDate} to ${toDate} | Filter Store: ${selectedStore === "all" ? "All Stores & Departments" : getBranchName(selectedStore)} | Categories: ${filterCategories.length === 0 ? "All" : filterCategories.join(", ")}</p>
+        </div>
+        ${summaryCardsHtml}
+        ${tableHtml}
+      </body>
+      </html>
+    `;
+  };
+
+  // Export current screen view as PDF / Print directly without opening a new tab
+  const handleExportPdf = () => {
+    if (!tableContainerRef.current) return;
+    setExportingPdf(true);
+    try {
+      const fullHtml = getVisibleTableHtml(false);
+
+      // Create a hidden iframe on the current page
+      let iframe = document.getElementById("print-report-iframe");
+      if (iframe) {
+        document.body.removeChild(iframe);
+      }
+      iframe = document.createElement("iframe");
+      iframe.id = "print-report-iframe";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+
+      const frameDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!frameDoc) {
+        setExportingPdf(false);
+        return;
+      }
+
+      frameDoc.open();
+      frameDoc.write(fullHtml);
+      frameDoc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setExportingPdf(false);
+        // Clean up iframe after print dialog completes
+        setTimeout(() => {
+          if (iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe);
+          }
+        }, 2000);
+      }, 400);
+    } catch (err) {
+      console.error("PDF export error:", err);
+      setExportingPdf(false);
+    }
+  };
+
+  // Export current screen view as Excel (matches exact visible rows)
+  const handleExportExcel = () => {
+    setExportingExcel(true);
+    try {
+      const htmlContent = getVisibleTableHtml(true);
+      const blob = new Blob([htmlContent], { type: "application/vnd.ms-excel;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Income_Expense_Report_${fromDate}_to_${toDate}.xls`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Excel export error:", err);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  // Helper to render transaction rows under a branch or subcategory
+  const renderTxRow = (t, i, keyPrefix, cat) => {
+    const dateStr = t.date
+      ? new Date(t.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      : "-";
+    const isRentOutOrReturnable = cat === "RentOut" || cat === "Returnable Income";
+    const isIncentiveCat = (cat || "").toLowerCase() === "incentive";
+    const tCash = isRentOutOrReturnable ? (t.amount || 0) : (t.cash || 0);
+    const tTotal = tCash + (isRentOutOrReturnable ? 0 : (t.rbl || 0) + (t.bank || 0) + (t.upi || 0));
+
+    return (
+      <tr key={`${keyPrefix}-tx-${i}`} className="bg-white hover:bg-slate-50/60 border-b border-slate-50 text-xs">
+        <td className="px-4 py-2.5 text-gray-500 pl-12 whitespace-nowrap italic">{dateStr}</td>
+        <td className="px-4 py-2.5 text-gray-600 font-medium italic">{t.originalSubCategory || t.subCategory || getCategoryLabel(cat)}</td>
+        <td className="px-4 py-2.5 text-gray-700 italic">
+          {isIncentiveCat ? (t.remark || t.customerName || "-") : (t.customerName || "-")}
+        </td>
+        <td className="px-4 py-2.5 text-gray-500 italic max-w-[180px] truncate" title={t.remark || ""}>
+          {t.remark || "-"}
+        </td>
+        {showBranch && (
+          <td className="px-4 py-2.5 text-gray-600 font-medium italic">
+            {getBranchName(t.locCode)}
+          </td>
+        )}
+        <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
+          {!isRentOutOrReturnable && t.rbl !== 0 ? fmt(Math.abs(t.rbl)) : "-"}
+        </td>
+        <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
+          {tCash !== 0 ? fmt(Math.abs(tCash)) : "-"}
+        </td>
+        <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
+          {!isRentOutOrReturnable && t.bank !== 0 ? fmt(Math.abs(t.bank)) : "-"}
+        </td>
+        <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
+          {!isRentOutOrReturnable && t.upi !== 0 ? fmt(Math.abs(t.upi)) : "-"}
+        </td>
+        <td className="px-4 py-2.5 text-right text-gray-800 font-mono font-bold italic">
+          {isRentOutOrReturnable ? fmt(Math.abs(tCash)) : fmt(Math.abs(tTotal))}
+        </td>
+      </tr>
+    );
+  };
+
+  // Groups an array of transactions by branch (locCode) with sub-totals
+  const groupTxByBranch = (transactions, cat) => {
+    const isRentOutOrReturnable = cat === "RentOut" || cat === "Returnable Income";
+    const branchMap = {};
+
+    transactions.forEach(t => {
+      const bKey = t.locCode ? String(t.locCode) : "unknown";
+      if (!branchMap[bKey]) {
+        branchMap[bKey] = {
+          locCode: t.locCode,
+          branchName: getBranchName(t.locCode),
+          transactions: [],
+          cash: 0,
+          rbl: 0,
+          bank: 0,
+          upi: 0,
+        };
+      }
+      const b = branchMap[bKey];
+      b.transactions.push(t);
+
+      if (isRentOutOrReturnable) {
+        b.cash += t.amount || 0;
+      } else {
+        b.cash += t.cash || 0;
+        b.rbl  += t.rbl  || 0;
+        b.bank += t.bank || 0;
+        b.upi  += t.upi  || 0;
+      }
+    });
+
+    return Object.values(branchMap)
+      .map(b => ({
+        ...b,
+        total: b.cash + b.rbl + b.bank + b.upi,
+      }))
+      .sort((a, b) => a.branchName.localeCompare(b.branchName));
+  };
+
+  // Renders: category header row → branch group row → directly transaction rows
   const renderCategoryRows = (grouped, typeLabel, isIncome, isReturnable = false, isExcluded = false) =>
     Object.keys(grouped).map(cat => {
       const g = grouped[cat];
@@ -885,6 +1137,7 @@ export default function IncomeExpenseReport() {
 
       // Collect all transactions directly under this category
       const transactions = Object.values(g.subCategories).flatMap(sg => sg.transactions);
+      const branchGroups = groupTxByBranch(transactions, cat);
 
       return (
         <tbody key={catKey} className="border-b border-gray-100">
@@ -911,7 +1164,7 @@ export default function IncomeExpenseReport() {
             <td className="px-4 py-3"></td>
           </tr>
 
-          {/* Direct Transaction Rows or Subcategories */}
+          {/* Grouped by Branch or Subcategories */}
           {isCatExp && (
             <>
               {(cat === "Sales" || cat === "Sales Return" || (typeLabel === "EXPENSE" && userCanSeeAdminExpenses)) ? (
@@ -920,7 +1173,8 @@ export default function IncomeExpenseReport() {
                   const subKey = `${catKey}-${sub}`;
                   const isSubExp = !!expanded[subKey];
                   const subTotal = sg.cash + sg.rbl + sg.bank + sg.upi;
-                  
+                  const subBranchGroups = showBranch ? groupTxByBranch(sg.transactions, cat) : [];
+
                   return (
                     <React.Fragment key={subKey}>
                       <tr 
@@ -941,94 +1195,85 @@ export default function IncomeExpenseReport() {
                         <td className="px-4 py-2.5"></td>
                       </tr>
                       
-                      {isSubExp && sg.transactions.map((t, i) => {
-                        const dateStr = t.date
-                          ? new Date(t.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-                          : "-";
-                        const isRentOutOrReturnable = cat === "RentOut" || cat === "Returnable Income";
-                        const isIncentiveCat = cat.toLowerCase() === "incentive";
-                        const tCash = isRentOutOrReturnable ? (t.amount || 0) : (t.cash || 0);
-                        const tTotal = tCash + (t.rbl || 0) + (t.bank || 0) + (t.upi || 0);
-                        
-                        return (
-                          <tr key={`${subKey}-tx-${i}`} className="bg-white hover:bg-slate-50/60 border-b border-slate-50 text-xs">
-                            <td className="px-4 py-2.5 text-gray-400 pl-12 whitespace-nowrap italic">{dateStr}</td>
-                            <td className="px-4 py-2.5 text-gray-500 font-medium italic">{t.originalSubCategory || t.subCategory || getCategoryLabel(cat)}</td>
-                            <td className="px-4 py-2.5 text-gray-600 italic">
-                              {isIncentiveCat ? (t.remark || t.customerName || "-") : (t.customerName || "-")}
-                            </td>
-                            <td className="px-4 py-2.5 text-gray-500 italic max-w-[180px] truncate" title={t.remark || ""}>
-                              {t.remark || "-"}
-                            </td>
-                            {showBranch && (
-                              <td className="px-4 py-2.5 text-gray-500 font-medium italic">
-                                {getBranchName(t.locCode)}
-                              </td>
-                            )}
-                            <td className="px-4 py-2.5 text-right text-gray-500 font-mono italic">
-                              {!isRentOutOrReturnable && t.rbl !== 0 ? fmt(Math.abs(t.rbl)) : "-"}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-gray-500 font-mono italic">
-                              {tCash !== 0 ? fmt(Math.abs(tCash)) : "-"}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-gray-500 font-mono italic">
-                              {!isRentOutOrReturnable && t.bank !== 0 ? fmt(Math.abs(t.bank)) : "-"}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-gray-500 font-mono italic">
-                              {!isRentOutOrReturnable && t.upi !== 0 ? fmt(Math.abs(t.upi)) : "-"}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-gray-700 font-mono font-bold italic">
-                              {isRentOutOrReturnable ? fmt(Math.abs(tCash)) : fmt(Math.abs(tTotal))}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {isSubExp && (
+                        showBranch && subBranchGroups.length > 1 ? (
+                          subBranchGroups.map(bg => {
+                            const branchKey = `${subKey}-b-${bg.locCode || bg.branchName}`;
+                            const isBranchExp = !!expanded[branchKey];
+
+                            return (
+                              <React.Fragment key={branchKey}>
+                                <tr
+                                  className="cursor-pointer transition-colors bg-slate-50/70 hover:bg-slate-100/80 border-t border-slate-100"
+                                  onClick={() => toggleExpand(branchKey)}
+                                >
+                                  <td className="px-4 py-2 text-center w-12 pl-12">
+                                    {isBranchExp ? <ChevronDown size={13} className="inline-block text-indigo-500" /> : <ChevronRight size={13} className="inline-block text-indigo-500" />}
+                                  </td>
+                                  <td className="px-4 py-2 text-xs font-semibold text-indigo-950" colSpan={showBranch ? 4 : 3}>
+                                    <span className="inline-flex items-center gap-1.5 font-bold text-indigo-900">
+                                      {bg.branchName}
+                                      <span className="text-[10px] font-normal text-indigo-500">({bg.transactions.length})</span>
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-right text-xs font-medium text-slate-700">{bg.rbl !== 0 ? signStr(bg.rbl) : "-"}</td>
+                                  <td className="px-4 py-2 text-right text-xs font-medium text-slate-700">{bg.cash !== 0 ? signStr(bg.cash) : "-"}</td>
+                                  <td className="px-4 py-2 text-right text-xs font-medium text-slate-700">{bg.bank !== 0 ? signStr(bg.bank) : "-"}</td>
+                                  <td className="px-4 py-2 text-right text-xs font-medium text-slate-700">{bg.upi !== 0 ? signStr(bg.upi) : "-"}</td>
+                                  <td className="px-4 py-2 text-right text-xs font-bold text-indigo-950">{fmt(Math.abs(bg.total))}</td>
+                                  <td className="px-4 py-2"></td>
+                                </tr>
+
+                                {isBranchExp && bg.transactions.map((t, i) => renderTxRow(t, i, branchKey, cat))}
+                              </React.Fragment>
+                            );
+                          })
+                        ) : (
+                          sg.transactions.map((t, i) => renderTxRow(t, i, subKey, cat))
+                        )
+                      )}
                     </React.Fragment>
                   );
                 })
               ) : (
-                transactions.map((t, i) => {
-                  const dateStr = t.date
-                    ? new Date(t.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-                    : "-";
-                  const isRentOutOrReturnable = cat === "RentOut" || cat === "Returnable Income";
-                  const isIncentiveCat = cat.toLowerCase() === "incentive";
-                  const tCash = isRentOutOrReturnable ? (t.amount || 0) : (t.cash || 0);
-                  const tTotal = tCash + (t.rbl || 0) + (t.bank || 0) + (t.upi || 0);
-                  
-                  return (
-                    <tr key={`${catKey}-tx-${i}`} className="bg-white hover:bg-slate-50/60 border-b border-slate-50 text-xs">
-                      <td className="px-4 py-2.5 text-gray-500 pl-8 whitespace-nowrap italic">{dateStr}</td>
-                      <td className="px-4 py-2.5 text-gray-600 font-medium italic">{t.originalSubCategory || t.subCategory || getCategoryLabel(cat)}</td>
-                      <td className="px-4 py-2.5 text-gray-700 italic">
-                        {isIncentiveCat ? (t.remark || t.customerName || "-") : (t.customerName || "-")}
-                      </td>
-                      <td className="px-4 py-2.5 text-gray-500 italic max-w-[180px] truncate" title={t.remark || ""}>
-                        {t.remark || "-"}
-                      </td>
-                      {showBranch && (
-                        <td className="px-4 py-2.5 text-gray-600 font-medium italic">
-                          {getBranchName(t.locCode)}
-                        </td>
-                      )}
-                      <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
-                        {!isRentOutOrReturnable && t.rbl !== 0 ? fmt(Math.abs(t.rbl)) : "-"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
-                        {tCash !== 0 ? fmt(Math.abs(tCash)) : "-"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
-                        {!isRentOutOrReturnable && t.bank !== 0 ? fmt(Math.abs(t.bank)) : "-"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-gray-600 font-mono italic">
-                        {!isRentOutOrReturnable && t.upi !== 0 ? fmt(Math.abs(t.upi)) : "-"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-gray-800 font-mono font-bold italic">
-                        {isRentOutOrReturnable ? fmt(Math.abs(tCash)) : fmt(Math.abs(tTotal))}
-                      </td>
-                    </tr>
-                  );
-                })
+                /* Group by Branch for Booking, RentOut, etc. when showBranch is enabled */
+                showBranch && branchGroups.length > 1 ? (
+                  branchGroups.map(bg => {
+                    const branchKey = `${catKey}-b-${bg.locCode || bg.branchName}`;
+                    const isBranchExp = !!expanded[branchKey];
+
+                    return (
+                      <React.Fragment key={branchKey}>
+                        {/* Branch Sub-header Row with Branch Totals */}
+                        <tr
+                          className="cursor-pointer transition-colors bg-gray-50/70 hover:bg-gray-100 border-t border-gray-100"
+                          onClick={() => toggleExpand(branchKey)}
+                        >
+                          <td className="px-4 py-2.5 text-center w-12 pl-8">
+                            {isBranchExp ? <ChevronDown size={14} className="inline-block text-gray-600" /> : <ChevronRight size={14} className="inline-block text-gray-600" />}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-semibold text-gray-800" colSpan={showBranch ? 4 : 3}>
+                            <span className="inline-flex items-center gap-1.5 font-bold text-gray-900">
+                              {bg.branchName}
+                              <span className="text-[10px] font-normal text-gray-500">({bg.transactions.length} entries)</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs font-medium text-gray-700">{bg.rbl !== 0 ? signStr(bg.rbl) : "-"}</td>
+                          <td className="px-4 py-2.5 text-right text-xs font-medium text-gray-700">{bg.cash !== 0 ? signStr(bg.cash) : "-"}</td>
+                          <td className="px-4 py-2.5 text-right text-xs font-medium text-gray-700">{bg.bank !== 0 ? signStr(bg.bank) : "-"}</td>
+                          <td className="px-4 py-2.5 text-right text-xs font-medium text-gray-700">{bg.upi !== 0 ? signStr(bg.upi) : "-"}</td>
+                          <td className="px-4 py-2.5 text-right text-xs font-bold text-gray-900">{fmt(Math.abs(bg.total))}</td>
+                          <td className="px-4 py-2.5"></td>
+                        </tr>
+
+                        {/* Individual Transactions for this Branch */}
+                        {isBranchExp && bg.transactions.map((t, i) => renderTxRow(t, i, branchKey, cat))}
+                      </React.Fragment>
+                    );
+                  })
+                ) : (
+                  transactions.map((t, i) => renderTxRow(t, i, catKey, cat))
+                )
               )}
             </>
           )}
@@ -1053,21 +1298,47 @@ export default function IncomeExpenseReport() {
       <Headers />
       
       <div className={`transition-all duration-300 p-3 sm:p-6 bg-[#fbfcfd] min-h-screen ${isSidebarOpen ? 'lg:ml-64 ml-0' : 'ml-0'}`}>
-        {/* Page Title & Header */}
-        <div style={{ marginBottom: "24px" }}>
-          <h1 style={{ 
-            fontSize: "24px", 
-            fontWeight: "700", 
-            color: "#1e293b",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-            margin: "0 0 4px 0"
-          }}>
-            Income &amp; Expenses Report
-          </h1>
-          <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
-            Detailed overview of Income &amp; Expense Report
-          </p>
+        {/* Page Title & Header with Export Buttons */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 style={{ 
+              fontSize: "24px", 
+              fontWeight: "700", 
+              color: "#1e293b",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              margin: "0 0 4px 0"
+            }}>
+              Income &amp; Expenses Report
+            </h1>
+            <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
+              Detailed overview of Income &amp; Expense Report
+            </p>
+          </div>
+
+          {hasData && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportExcel}
+                disabled={exportingExcel}
+                className="h-[38px] px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer inline-flex items-center gap-1.5"
+                title="Download Excel representing current expanded screen view"
+              >
+                <FileSpreadsheet size={15} />
+                <span>{exportingExcel ? "Exporting..." : "Excel"}</span>
+              </button>
+
+              <button
+                onClick={handleExportPdf}
+                disabled={exportingPdf}
+                className="h-[38px] px-3.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer inline-flex items-center gap-1.5"
+                title="Download PDF representing current expanded screen view"
+              >
+                <FileText size={15} />
+                <span>{exportingPdf ? "Generating..." : "PDF"}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Filters Card */}
@@ -1341,7 +1612,7 @@ export default function IncomeExpenseReport() {
         )}
 
         {/* Report Table Card */}
-        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+        <div ref={tableContainerRef} className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead className="">
